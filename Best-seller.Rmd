@@ -1,0 +1,184 @@
+---
+title: "Data visualization project"
+name : "Elnaz Khaveh"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#### Best seller books between 2009 and 2019
+
+<p> **In this article we are going to answer 4 questions according to the plots.**
+
+1.Which genre was more popular in the bestseller books in general? how about each year?
+
+2.How the rates of different categories of books change as the price increases? Is there any correlation between price and rating or review?
+
+3.Find the top 10 authors in this 10 years and the number of their books.
+
+
+
+```{r , include=FALSE}
+library(renv)
+library(ggplot2)
+library(dplyr)
+library(tidyverse)
+library(readr)
+library(ggbeeswarm)
+library(RColorBrewer)
+library(ggpubr)
+library(ggthemes)
+library(ggridges)
+library(viridis)
+library(hrbrthemes)
+library(lattice)
+library(reshape2)
+library(ggheatmap)
+library(packcircles)
+
+renv :: init()
+```
+
+
+<p> In the first part of the visualization I aim to work on the genres of the books, to see which genre was rated more in each year and in general.
+
+##### plots for comparing the genres of bestseller books, for each year and in general
+
+
+
+```{r}
+df <- read.csv('data/bestsellers with categories.csv')
+
+
+g1 <- ggplot(df)+
+      geom_bar(mapping=aes(x=Genre, fill=Genre))+
+      theme_hc()+
+      scale_fill_brewer(palette = "Accent")+
+      labs(title = "Total number of genres in 10 years", subtitle = "Barplot showing the total number of genres", x = "Genres", y = "Count")+
+   theme(plot.subtitle = element_text(size = 8))
+
+
+
+
+g2 <- ggplot(df) +
+      geom_bar(aes(x = Year,  fill = Genre), position = position_dodge2(preserve ="single"))+
+coord_polar()+
+scale_fill_brewer(palette = "Accent") + 
+theme_hc()+
+labs(title = "Genres of books per year", subtitle = "A pie chart involved another coordinate system", x = "Genres per year" , y = "Count")+
+  scale_x_continuous(breaks = c(2009, 2010, 2011, 2012, 2013, 2014, 2015,2016,2017,2018,2019))+
+  theme(plot.subtitle = element_text(size = 8))
+
+ggarrange(g1,g2, ncol = 2 )
+
+
+
+
+
+
+
+
+ 
+
+
+
+
+
+
+
+```
+<p> **Insights** :
+<p> - In general non fiction genre was more popular in this timelapse among the bestseller books.
+- Also it is obvious from the right plot that non fiction genre was more popular in each year.
+
+
+<p> In the next part we are going to look at the density of prices vs User Rating. To do that first we mutate a column to categorize different ratings. For example ratings between 4.6 and 5 are considered as 'perfect' and etc. In the second part we look at the user rating and also reviews vs prices, the size of the circles shows the reviews. The bigger the circles, the more the reviews.
+
+##### Plots of User Rating vs. price
+```{r}
+df2 <- df %>%
+  mutate(Scores = case_when(User.Rating %in% c(5,4.9,4.8,4.7) ~"Ideal", 
+                     User.Rating %in% c(4.6,4.5,4.4,4.3) ~ "Premium",
+                     User.Rating %in% c(4.2,4.1,4.0,3.9)~ "Very good",
+                     User.Rating %in% c(3.8,3.7,3.6,3.3) ~ "Good"))
+df3 <- df2 %>% 
+  mutate(Scores = fct_relevel(Scores, levels = "Ideal", "Premium", "Very good", "Good"))
+
+gg1 <- ggplot(df3, aes(x = Price, y = Scores, fill = stat(y))) +
+  geom_density_ridges(alpha = 0.6) +
+  coord_cartesian(clip = "off") +
+  theme_classic2() +
+  scale_color_viridis_c()+
+  labs(title = "Scores of the books 
+and their prices")+
+   theme(plot.title = element_text(size = 12))
+
+
+
+gg2 <- df2 %>% head(100) %>% 
+  
+  ggplot(aes(x= Price , y= User.Rating , size = Reviews, fill = Scores ))+
+    geom_point(alpha=0.4, shape=21) +
+    scale_size(range = c(0.1, 16), name="Reviews") +
+    scale_fill_brewer(palette = "Blues") +
+    
+    labs( title = "The correlation between price, review and rates for the first 100 books", subtitle = "A bubble plot", caption = "The size of the circles shows the number of reviews", x = "Price", y = "User Rating" ) +
+    theme(legend.position = "none")
+ggarrange(gg1,gg2)
+
+
+```
+<p> **Insights:**
+<p> -This graph shows the price range for most of the bestseller books, no matter what their score is, is between 10 to 30.
+-The right plot shows that big circles are the cheaper which means higher reviews as well as rating is for cheaper books. To check this I show the correlation between these 3 variables in a heatmap.
+
+```{r}
+df4 <- select(df, Reviews, User.Rating, Price)
+
+cormat <- round(cor(df4),2)
+melted_cormat <- melt(cormat)
+
+ggheatmap <- ggplot(melted_cormat, aes(Var2, Var1, fill = value))+
+ geom_tile(color = "white")+
+ scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+   midpoint = 0, limit = c(-1,1), space = "Lab", 
+    name="Pearson\nCorrelation") +
+  theme_minimal()+ 
+ theme(axis.text.x = element_text(angle = 45, vjust = 1, 
+    size = 12, hjust = 1))+
+ coord_fixed()
+ggheatmap
+  
+```
+<p>This correlation map shows that the correlation between review and rating with price is negative which means that books with higher rates and reviews are cheaper, but it does not mean that because they are cheap they have higher rates and reviews since correlation does not mean causality. Also the correlation between user rating and review is almost zero which shows that they are not correlated.
+
+<p>In the next part we are going to see the top 30 books in the whole 10 years and the authors with the number of their books among this top 30. 
+
+
+
+```{r}
+df_sorted <- arrange(df , -User.Rating)
+df_sorted_top <- head(df_sorted,30)
+top_authors <- count(df_sorted_top,Author)
+ar_t <- arrange(top_authors,n)
+
+ggplot(ar_t , aes(x = Author, y = n )) +
+  geom_segment(aes(x = Author, xend = Author, y = 0, yend = n), color = "blue") +
+  theme_light()+
+  theme(panel.grid.major.x = element_blank(),
+    panel.border = element_blank()) +
+  geom_point(color = "red") +
+  theme_classic2()+
+  theme(axis.text.x = element_text(angle = 60, hjust = 1))+
+  labs(title = "11 high ranked authors with the number of their books", y = "Number of books")
+
+
+
+
+
+```
+<p> In this plot we can see the 11 top authors of the top 30 best seller books in these 10 years with the number of their books. As we can see Dav Pilkey had the most number of books among these authors.
+
+
